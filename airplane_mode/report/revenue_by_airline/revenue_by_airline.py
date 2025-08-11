@@ -3,7 +3,7 @@
 
 import frappe
 from frappe import _
-
+from frappe.query_builder.functions import Sum
 
 def execute(filters: dict | None = None):
 	"""Return columns and data for the report.
@@ -35,6 +35,7 @@ def execute(filters: dict | None = None):
 	}]
 
 	return columns, data, None, chart, summary
+	# return columns, data
 
 
 def get_columns() -> list[dict]:
@@ -63,10 +64,42 @@ def get_data() -> list[list]:
 	The report data is a list of rows, with each row being a list of cell values.
 	"""
 
-	tickets = frappe.get_all("Airplane Ticket", fields=["SUM(total_amount) as total_revenue", "flight.airplane as airplane"], group_by="airplane")
+	# frappe.qb.from_('Airplane Ticket').select(
+	# 	'id', 'fname', 'lname', 'phone'
+	# 	).run()
 
-	for ticket in tickets:
-		ticket.airline = frappe.db.get_value('Airplane', ticket.airplane, 'airline')
-		del ticket['airplane']
+	ticket = frappe.qb.DocType('Airplane Ticket')
+	flight = frappe.qb.DocType('Airplane Flight')
+	airplane = frappe.qb.DocType('Airplane')
+	sum_amount = Sum(ticket.total_amount).as_("total_revenue")
 
-	return tickets
+
+	# result = frappe.db.sql(
+	# 	f"""
+	# 	SELECT SUM(total_amount) as total_revenue, airline
+	# 	FROM `tabAirplane Ticket` as ticket
+	# 	INNER JOIN `tabAirplane Flight` as flight on ticket.flight = flight.name
+	# 	INNER JOIN `tabAirplane` as airplane on flight.airplane = airplane.name
+	# 	Group By airplane.airline
+	# 	"""
+	# )
+	# print(result)
+
+	query_str = (frappe.qb.from_(ticket)
+	.inner_join(flight)
+	.on(ticket.flight == flight.name)
+	.inner_join(airplane)
+	.on(flight.airplane == airplane.name)
+	.select(sum_amount, airplane.airline)
+	.groupby(airplane.airline))
+	# print(query_str)
+	
+	result = query_str.run(as_dict=True)
+	print(result)
+	# tickets = frappe.get_all("Airplane Ticket", fields=["SUM(total_amount) as total_revenue", "flight.airplane as airplane"], group_by="airplane")
+
+	# for ticket in tickets:
+	# 	ticket.airline = frappe.db.get_value('Airplane', ticket.airplane, 'airline')
+	# 	del ticket['airplane']
+
+	return result
